@@ -74,14 +74,18 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// I DO NOT UNDERSTAND
+	aspectRatio, err := getVideoAspectRatio(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid aspect ratio", err)
+		return
+	}
+
 	if _, err := tempFile.Seek(0, io.SeekStart); err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Could not reset file pointer", err)
 		return
 	}
-	// I DO NOT UNDERSTAND
 
-	key := getAssetPath(mediaType)
+	key := getAssetPath(mediaType, aspectRatio)
 	cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
 		Key:         &key,

@@ -60,7 +60,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusBadRequest, "Incorrect thumbnail format", nil)
 	}
 
-	fileNameExt := getAssetPath(mediaType)
+	fileNameExt := getAssetPath(mediaType, "")
 
 	diskFile, err := os.Create(cfg.getAssetDiskPath(fileNameExt))
 	if err != nil {

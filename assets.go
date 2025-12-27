@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -16,7 +20,7 @@ func (cfg apiConfig) ensureAssetsDir() error {
 	return nil
 }
 
-func getAssetPath(mediaType string) string {
+func getAssetPath(mediaType, aspectRatio string) string {
 	base := make([]byte, 32)
 	_, err := rand.Read(base)
 	if err != nil {
@@ -25,7 +29,17 @@ func getAssetPath(mediaType string) string {
 	id := base64.RawURLEncoding.EncodeToString(base)
 
 	ext := mediaTypeToExt(mediaType)
-	return fmt.Sprintf("%s%s", id, ext)
+	if aspectRatio == "" {
+		return fmt.Sprintf("%s%s", id, ext)
+	}
+	if aspectRatio == "16:9" {
+		return fmt.Sprintf("landscape-%s%s", id, ext)
+	}
+	if aspectRatio == "9:16" {
+		return fmt.Sprintf("portrait-%s%s", id, ext)
+	}
+	return fmt.Sprintf("other-%s%s", id, ext)
+
 }
 
 func (cfg apiConfig) getObjectURL(key string) string {
@@ -46,4 +60,47 @@ func mediaTypeToExt(mediaType string) string {
 		return ".bin"
 	}
 	return "." + parts[1]
+}
+
+func getVideoAspectRatio(filePath string) (aspectRatio string, err error) {
+	osCmd := exec.Command("ffprobe", "-v", "error", "-print_format", "json", "-show_streams", filePath)
+
+	var buffer bytes.Buffer
+	osCmd.Stdout = &buffer
+
+	if err := osCmd.Run(); err != nil {
+		return "", err
+	}
+
+	var osResponse struct {
+		Streams []struct {
+			CodecType string `json:"codec_type"`
+			Width     int    `json:"width"`
+			Height    int    `json:"height"`
+		} `json:"streams"`
+	}
+
+	if err := json.Unmarshal(buffer.Bytes(), &osResponse); err != nil {
+		return "", err
+	}
+
+	for _, v := range osResponse.Streams {
+		if v.CodecType == "video" {
+			if v.Height == 0 || v.Width == 0 {
+				return "", errors.New("invalid video ratio")
+			}
+
+			if v.Height*16 == v.Width*9 {
+				return "16:9", nil
+			}
+			if v.Height*9 == v.Width*16 {
+				return "9:16", nil
+			}
+			return "other", nil
+
+		}
+
+	}
+
+	return "", errors.New("no video stream")
 }
