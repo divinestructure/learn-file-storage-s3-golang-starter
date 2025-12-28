@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -60,7 +61,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusBadRequest, "Invalid file type, only MP4 is allowed", err)
 	}
 
-	tempFile, err := os.CreateTemp("", "temporary-penis.mp4")
+	tempFile, err := os.CreateTemp("", "temporary-penis")
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Could not create temp file", err)
 		return
@@ -80,6 +81,20 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	outputPath, err := processVideoForFastStart(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error faststart processing", err)
+		return
+	}
+	defer os.Remove(outputPath)
+
+	processedFile, err := os.Open(outputPath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error opening faststart file", err)
+		return
+	}
+	defer processedFile.Close()
+
 	if _, err := tempFile.Seek(0, io.SeekStart); err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Could not reset file pointer", err)
 		return
@@ -89,17 +104,25 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
 		Key:         &key,
-		Body:        tempFile,
+		Body:        processedFile,
 		ContentType: aws.String(mediaType),
 	})
 
-	url := cfg.getObjectURL(key)
-	video.VideoURL = &url
+	// url := cfg.getObjectURL(key)
+	bucketAndKey := fmt.Sprintf("%s,%s", cfg.s3Bucket, key)
+	video.VideoURL = &bucketAndKey
+
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't update video", err)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, video)
+	presignedVideo, err := cfg.dbVideoToSignedVideo(video)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error creating presignedURL", err)
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, presignedVideo)
 }

@@ -50,10 +50,6 @@ func (cfg apiConfig) getAssetDiskPath(assetPath string) string {
 	return filepath.Join(cfg.assetsRoot, assetPath)
 }
 
-func (cfg apiConfig) getAssetURL(assetPath string) string {
-	return fmt.Sprintf("http://localhost:%s/assets/%s", cfg.port, assetPath)
-}
-
 func mediaTypeToExt(mediaType string) string {
 	parts := strings.Split(mediaType, "/")
 	if len(parts) != 2 {
@@ -103,4 +99,16 @@ func getVideoAspectRatio(filePath string) (aspectRatio string, err error) {
 	}
 
 	return "", errors.New("no video stream")
+}
+
+func processVideoForFastStart(filePath string) (string, error) {
+	outputPath := filePath + ".processing"
+
+	cmd := exec.Command("ffmpeg", "-i", filePath, "-c", "copy", "-movflags", "faststart", "-f", "mp4", outputPath)
+
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+
+	return outputPath, nil
 }
