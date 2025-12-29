@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -108,9 +107,8 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		ContentType: aws.String(mediaType),
 	})
 
-	// url := cfg.getObjectURL(key)
-	bucketAndKey := fmt.Sprintf("%s,%s", cfg.s3Bucket, key)
-	video.VideoURL = &bucketAndKey
+	url := cfg.getObjectURL(key)
+	video.VideoURL = &url
 
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
@@ -118,11 +116,5 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	presignedVideo, err := cfg.dbVideoToSignedVideo(video)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Error creating presignedURL", err)
-		return
-	}
-
-	respondWithJSON(w, http.StatusOK, presignedVideo)
+	respondWithJSON(w, http.StatusOK, video)
 }
